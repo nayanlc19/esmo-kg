@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import Link from 'next/link';
 import {
   ReactFlow,
@@ -23,14 +23,12 @@ const nodeData: Record<string, {
   children?: string[];
   category: 'stage' | 'decision' | 'treatment' | 'drug' | 'biomarker' | 'outcome';
 }> = {
-  // Root
   'nsclc': {
     label: 'NSCLC Diagnosis',
     definition: 'Non-Small Cell Lung Cancer confirmed by histopathology. Accounts for ~85% of lung cancers. Includes adenocarcinoma, squamous cell carcinoma, and large cell carcinoma.',
     category: 'stage',
     children: ['stage-i', 'stage-ii', 'stage-iii', 'stage-iv'],
   },
-  // Stages
   'stage-i': {
     label: 'Stage I',
     definition: 'Tumor ≤4cm, confined to lung, no lymph node involvement (N0). Stage IA: ≤3cm, Stage IB: >3-4cm. 5-year survival: 70-90%.',
@@ -41,7 +39,7 @@ const nodeData: Record<string, {
     label: 'Stage II',
     definition: 'Tumor >4-5cm OR involvement of ipsilateral hilar lymph nodes (N1). Stage IIA: 4-5cm N0, Stage IIB: >5cm N0 or any T with N1. 5-year survival: 50-60%.',
     category: 'stage',
-    children: ['stage-ii-surgery', 'stage-ii-adjuvant'],
+    children: ['stage-ii-surgery'],
   },
   'stage-iii': {
     label: 'Stage III',
@@ -55,7 +53,6 @@ const nodeData: Record<string, {
     category: 'stage',
     children: ['stage-iv-testing'],
   },
-  // Stage I branches
   'stage-i-operable': {
     label: 'Medically Operable',
     definition: 'Patient fit for surgery based on pulmonary function (FEV1, DLCO), cardiac status, and performance status (ECOG 0-1).',
@@ -64,7 +61,7 @@ const nodeData: Record<string, {
   },
   'stage-i-inoperable': {
     label: 'Medically Inoperable',
-    definition: 'Patient unfit for surgery due to severe COPD, cardiac disease, poor performance status, or patient preference. Consider SBRT.',
+    definition: 'Patient unfit for surgery due to severe COPD, cardiac disease, poor performance status, or patient preference.',
     category: 'decision',
     children: ['sbrt'],
   },
@@ -113,7 +110,7 @@ const nodeData: Record<string, {
   },
   'port': {
     label: 'PORT',
-    definition: 'Post-Operative Radiation Therapy. 50-54 Gy to surgical bed. Controversial - may improve local control but not survival.',
+    definition: 'Post-Operative Radiation Therapy. 50-54 Gy to surgical bed.',
     evidence: '[II, B]',
     trials: ['Lung ART: No OS benefit for PORT in N2 disease'],
     category: 'treatment',
@@ -124,18 +121,11 @@ const nodeData: Record<string, {
     definition: 'Follow-up: CT chest every 6 months for 2 years, then annually. Monitor for recurrence.',
     category: 'outcome',
   },
-  // Stage II
   'stage-ii-surgery': {
     label: 'Surgical Resection',
-    definition: 'Lobectomy or pneumonectomy with systematic lymph node dissection. Higher morbidity than Stage I.',
+    definition: 'Lobectomy or pneumonectomy with systematic lymph node dissection.',
     evidence: '[I, A]',
     category: 'treatment',
-    children: ['stage-ii-adjuvant'],
-  },
-  'stage-ii-adjuvant': {
-    label: 'Adjuvant Therapy',
-    definition: 'Post-operative treatment to reduce recurrence risk. Depends on EGFR status and PD-L1.',
-    category: 'decision',
     children: ['egfr-testing-adj'],
   },
   'egfr-testing-adj': {
@@ -150,7 +140,6 @@ const nodeData: Record<string, {
     evidence: '[I, A] MCBS 4',
     trials: ['ADAURA: 83% vs 28% 3-year DFS for EGFR+ (HR 0.17)'],
     category: 'drug',
-    children: ['surveillance'],
   },
   'adj-chemo': {
     label: 'Adjuvant Chemotherapy',
@@ -158,35 +147,19 @@ const nodeData: Record<string, {
     evidence: '[I, A]',
     trials: ['LACE meta-analysis: 5% absolute survival benefit at 5 years'],
     category: 'treatment',
-    children: ['atezolizumab-adj'],
   },
-  'atezolizumab-adj': {
-    label: 'Atezolizumab (Adjuvant)',
-    definition: 'PD-L1 inhibitor. 1200mg IV q3w for 1 year. For PD-L1 ≥1% after adjuvant chemo.',
-    evidence: '[II, B]',
-    trials: ['IMpower010: Improved DFS in PD-L1 TC ≥1%'],
-    category: 'drug',
-    children: ['surveillance'],
-  },
-  // Stage III
   'stage-iii-concurrent': {
     label: 'Concurrent CRT',
     definition: 'Chemotherapy given simultaneously with radiation. Superior to sequential for fit patients.',
     evidence: '[I, A]',
     trials: ['RTOG 9410: Concurrent superior to sequential (median OS 17 vs 14.6 mo)'],
     category: 'treatment',
-    children: ['crt-regimen'],
+    children: ['consolidation-testing'],
   },
   'stage-iii-sequential': {
     label: 'Sequential CRT',
     definition: 'Chemotherapy followed by radiation. For patients unfit for concurrent treatment.',
     evidence: '[I, A]',
-    category: 'treatment',
-    children: ['crt-regimen'],
-  },
-  'crt-regimen': {
-    label: 'CRT Regimen',
-    definition: 'RT: 60 Gy in 30 fractions. Chemo: Cisplatin-etoposide or carboplatin-paclitaxel x2-3 cycles.',
     category: 'treatment',
     children: ['consolidation-testing'],
   },
@@ -202,7 +175,6 @@ const nodeData: Record<string, {
     evidence: '[I, A] MCBS 4',
     trials: ['LAURA: PFS 39.1 vs 5.6 months (HR 0.16)'],
     category: 'drug',
-    children: ['surveillance'],
   },
   'durvalumab-consol': {
     label: 'Durvalumab (Consolidation)',
@@ -210,9 +182,7 @@ const nodeData: Record<string, {
     evidence: '[I, A] MCBS 4',
     trials: ['PACIFIC: Median OS 47.5 vs 29.1 months (HR 0.68)'],
     category: 'drug',
-    children: ['surveillance'],
   },
-  // Stage IV
   'stage-iv-testing': {
     label: 'Molecular Testing',
     definition: 'Comprehensive NGS panel: EGFR, ALK, ROS1, BRAF, RET, MET, KRAS, NTRK, HER2. Plus PD-L1 IHC.',
@@ -223,7 +193,7 @@ const nodeData: Record<string, {
     label: 'Oncogene-Addicted',
     definition: 'Tumors driven by specific mutations (EGFR, ALK, ROS1, etc.). Targeted therapy preferred over immunotherapy.',
     category: 'decision',
-    children: ['egfr-mut', 'alk-fusion', 'ros1-fusion', 'other-targets'],
+    children: ['egfr-mut', 'alk-fusion', 'other-targets'],
   },
   'non-oncogene': {
     label: 'Non-Oncogene Addicted',
@@ -231,10 +201,9 @@ const nodeData: Record<string, {
     category: 'decision',
     children: ['pdl1-high', 'pdl1-low'],
   },
-  // Oncogene targets
   'egfr-mut': {
     label: 'EGFR Mutation',
-    definition: 'Exon 19 deletion or L858R mutation in ~15% Caucasian, ~50% Asian NSCLC. Predicts response to EGFR TKIs.',
+    definition: 'Exon 19 deletion or L858R mutation in ~15% Caucasian, ~50% Asian NSCLC.',
     category: 'biomarker',
     children: ['osimertinib-1l'],
   },
@@ -247,7 +216,7 @@ const nodeData: Record<string, {
   },
   'alk-fusion': {
     label: 'ALK Fusion',
-    definition: 'ALK rearrangement in ~5% NSCLC. More common in younger, never-smokers. Highly responsive to ALK TKIs.',
+    definition: 'ALK rearrangement in ~5% NSCLC. More common in younger, never-smokers.',
     category: 'biomarker',
     children: ['alectinib'],
   },
@@ -258,25 +227,11 @@ const nodeData: Record<string, {
     trials: ['ALEX: 5-year OS 62.5% vs 45.5% with crizotinib'],
     category: 'drug',
   },
-  'ros1-fusion': {
-    label: 'ROS1 Fusion',
-    definition: 'ROS1 rearrangement in ~1-2% NSCLC. Similar to ALK. Responds to crizotinib, entrectinib.',
-    category: 'biomarker',
-    children: ['entrectinib'],
-  },
-  'entrectinib': {
-    label: 'Entrectinib',
-    definition: 'ROS1/NTRK/ALK inhibitor. 600mg daily. CNS-active. Preferred for ROS1+ with brain mets.',
-    evidence: '[I, A]',
-    trials: ['STARTRK-2: ORR 67%, intracranial ORR 55%'],
-    category: 'drug',
-  },
   'other-targets': {
     label: 'Other Targets',
     definition: 'BRAF V600E: Dabrafenib+Trametinib. RET: Selpercatinib. MET ex14: Capmatinib. KRAS G12C: Sotorasib.',
     category: 'biomarker',
   },
-  // Non-oncogene
   'pdl1-high': {
     label: 'PD-L1 ≥50%',
     definition: 'High PD-L1 expression. Can receive pembrolizumab monotherapy or chemo-immunotherapy.',
@@ -284,7 +239,7 @@ const nodeData: Record<string, {
     children: ['pembro-mono'],
   },
   'pembro-mono': {
-    label: 'Pembrolizumab Monotherapy',
+    label: 'Pembrolizumab Mono',
     definition: 'PD-1 inhibitor. 200mg q3w. For PD-L1 ≥50%, no contraindications to immunotherapy.',
     evidence: '[I, A] MCBS 5',
     trials: ['KEYNOTE-024: Median OS 30 vs 14.2 months vs chemo (HR 0.62)'],
@@ -305,7 +260,6 @@ const nodeData: Record<string, {
   },
 };
 
-// Color mapping
 const categoryColors: Record<string, string> = {
   stage: '#9333ea',
   decision: '#1e40af',
@@ -319,55 +273,78 @@ export default function FlowchartsPage() {
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set(['nsclc']));
   const [hoveredNode, setHoveredNode] = useState<string | null>(null);
 
-  // Build visible nodes and edges based on expanded state
-  const buildGraph = useCallback(() => {
-    const nodes: Node[] = [];
-    const edges: Edge[] = [];
-    const positions: Record<string, { x: number; y: number }> = {};
+  // Build nodes and edges
+  const { nodes, edges } = useMemo(() => {
+    const resultNodes: Node[] = [];
+    const resultEdges: Edge[] = [];
 
-    // Calculate positions using BFS
-    const queue: { id: string; level: number; index: number; parentX: number }[] = [
-      { id: 'nsclc', level: 0, index: 0, parentX: 500 }
-    ];
-    const levelCounts: Record<number, number> = { 0: 1 };
+    // BFS to build the tree
+    const queue: { id: string; x: number; y: number }[] = [{ id: 'nsclc', x: 400, y: 50 }];
     const visited = new Set<string>();
+    const levelNodes: Record<number, string[]> = {};
+    const nodePositions: Record<string, { x: number; y: number }> = {};
 
-    while (queue.length > 0) {
-      const { id, level, parentX } = queue.shift()!;
+    // First pass: collect all visible nodes by level
+    const tempQueue: { id: string; level: number }[] = [{ id: 'nsclc', level: 0 }];
+    while (tempQueue.length > 0) {
+      const { id, level } = tempQueue.shift()!;
+      if (visited.has(id)) continue;
+      visited.add(id);
+
+      if (!levelNodes[level]) levelNodes[level] = [];
+      levelNodes[level].push(id);
+
+      const data = nodeData[id];
+      if (data?.children && expandedNodes.has(id)) {
+        data.children.forEach(childId => {
+          tempQueue.push({ id: childId, level: level + 1 });
+        });
+      }
+    }
+
+    // Calculate positions
+    Object.entries(levelNodes).forEach(([levelStr, ids]) => {
+      const level = parseInt(levelStr);
+      const totalWidth = 900;
+      const spacing = totalWidth / (ids.length + 1);
+
+      ids.forEach((id, idx) => {
+        nodePositions[id] = {
+          x: spacing * (idx + 1),
+          y: 50 + level * 130,
+        };
+      });
+    });
+
+    // Create nodes
+    visited.clear();
+    const nodeQueue = ['nsclc'];
+    while (nodeQueue.length > 0) {
+      const id = nodeQueue.shift()!;
       if (visited.has(id)) continue;
       visited.add(id);
 
       const data = nodeData[id];
       if (!data) continue;
 
-      const levelWidth = 900;
-      const siblings = levelCounts[level] || 1;
-      const xOffset = (visited.size % siblings) * (levelWidth / siblings);
+      const pos = nodePositions[id] || { x: 400, y: 50 };
+      const hasChildren = data.children && data.children.length > 0;
+      const isExpanded = expandedNodes.has(id);
 
-      positions[id] = {
-        x: parentX + (Math.random() - 0.5) * 100,
-        y: level * 150,
-      };
-
-      nodes.push({
+      resultNodes.push({
         id,
-        position: positions[id],
+        position: pos,
         data: {
           label: (
-            <div
-              className="text-center cursor-pointer"
-              onMouseEnter={() => setHoveredNode(id)}
-              onMouseLeave={() => setHoveredNode(null)}
-            >
-              <div className="font-semibold">{data.label}</div>
+            <div className="text-center">
+              <div className="font-semibold text-sm">{data.label}</div>
               {data.evidence && (
-                <div className="text-xs mt-1 opacity-80">{data.evidence}</div>
+                <div className="text-xs opacity-80 mt-1">{data.evidence}</div>
               )}
-              {data.children && expandedNodes.has(id) && (
-                <div className="text-xs mt-1 opacity-60">Click to collapse</div>
-              )}
-              {data.children && !expandedNodes.has(id) && (
-                <div className="text-xs mt-1 opacity-60">Click to expand →</div>
+              {hasChildren && (
+                <div className="text-xs opacity-60 mt-1">
+                  {isExpanded ? '▼ Click to collapse' : '► Click to expand'}
+                </div>
               )}
             </div>
           ),
@@ -375,32 +352,21 @@ export default function FlowchartsPage() {
         style: {
           background: categoryColors[data.category],
           color: 'white',
-          border: hoveredNode === id ? '3px solid #fbbf24' : 'none',
-          borderRadius: data.category === 'decision' ? '50%' : '8px',
-          padding: '12px 16px',
-          minWidth: data.category === 'decision' ? '120px' : '140px',
-          boxShadow: hoveredNode === id ? '0 0 20px rgba(251, 191, 36, 0.5)' : 'none',
+          border: hoveredNode === id ? '3px solid #fbbf24' : '2px solid rgba(255,255,255,0.2)',
+          borderRadius: data.category === 'decision' ? '20px' : '8px',
+          padding: '10px 14px',
+          minWidth: '120px',
+          maxWidth: '160px',
+          cursor: hasChildren ? 'pointer' : 'default',
+          boxShadow: hoveredNode === id ? '0 0 20px rgba(251, 191, 36, 0.5)' : '0 4px 6px rgba(0,0,0,0.3)',
         },
       });
 
-      // Add children if expanded
-      if (data.children && expandedNodes.has(id)) {
-        const childCount = data.children.length;
-        data.children.forEach((childId, idx) => {
-          if (!levelCounts[level + 1]) levelCounts[level + 1] = 0;
-          levelCounts[level + 1]++;
-
-          const spread = childCount > 1 ? 200 : 0;
-          const childX = positions[id].x + (idx - (childCount - 1) / 2) * spread;
-
-          queue.push({
-            id: childId,
-            level: level + 1,
-            index: idx,
-            parentX: childX
-          });
-
-          edges.push({
+      // Add children to queue and create edges
+      if (data.children && isExpanded) {
+        data.children.forEach(childId => {
+          nodeQueue.push(childId);
+          resultEdges.push({
             id: `${id}-${childId}`,
             source: id,
             target: childId,
@@ -413,92 +379,81 @@ export default function FlowchartsPage() {
       }
     }
 
-    return { nodes, edges };
+    return { nodes: resultNodes, edges: resultEdges };
   }, [expandedNodes, hoveredNode]);
 
-  const { nodes: initialNodes, edges: initialEdges } = buildGraph();
-  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
-  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
+  const [flowNodes, setFlowNodes, onNodesChange] = useNodesState(nodes);
+  const [flowEdges, setFlowEdges, onEdgesChange] = useEdgesState(edges);
 
-  // Update nodes when expanded state changes
-  const handleNodeClick = useCallback((event: React.MouseEvent, node: Node) => {
-    const id = node.id;
-    const data = nodeData[id];
+  // Update when nodes/edges change
+  useEffect(() => {
+    setFlowNodes(nodes);
+    setFlowEdges(edges);
+  }, [nodes, edges, setFlowNodes, setFlowEdges]);
 
+  const handleNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
+    const data = nodeData[node.id];
     if (data?.children) {
       setExpandedNodes(prev => {
         const next = new Set(prev);
-        if (next.has(id)) {
-          // Collapse: remove this node and all descendants
-          const toRemove = new Set<string>();
-          const queue = [id];
-          while (queue.length > 0) {
-            const current = queue.shift()!;
-            toRemove.add(current);
-            const children = nodeData[current]?.children || [];
-            queue.push(...children);
-          }
-          toRemove.forEach(n => next.delete(n));
-          next.add(id); // Keep the clicked node but collapsed
-          next.delete(id); // Actually collapse it
+        if (next.has(node.id)) {
+          next.delete(node.id);
         } else {
-          next.add(id);
+          next.add(node.id);
         }
         return next;
       });
     }
   }, []);
 
-  // Rebuild graph when expandedNodes changes
-  const { nodes: newNodes, edges: newEdges } = buildGraph();
+  const handleNodeMouseEnter = useCallback((_: React.MouseEvent, node: Node) => {
+    setHoveredNode(node.id);
+  }, []);
+
+  const handleNodeMouseLeave = useCallback(() => {
+    setHoveredNode(null);
+  }, []);
 
   const hoveredData = hoveredNode ? nodeData[hoveredNode] : null;
 
   return (
-    <div className="min-h-screen bg-slate-900 flex">
-      {/* Main flowchart area */}
+    <div className="h-screen bg-slate-900 flex">
       <div className="flex-1 relative">
-        {/* Header */}
-        <div className="absolute top-0 left-0 right-0 z-10 bg-gray-900/95 border-b border-gray-700 px-6 py-4">
+        <div className="absolute top-0 left-0 right-0 z-10 bg-gray-900/95 border-b border-gray-700 px-6 py-3">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-2xl font-bold text-white">ESMO Living Guidelines - Interactive Flowchart</h1>
-              <p className="text-sm text-gray-400">
-                Click nodes to expand pathways. Hover for detailed information.
-              </p>
+              <h1 className="text-xl font-bold text-white">ESMO Living Guidelines - Interactive Flowchart</h1>
+              <p className="text-sm text-gray-400">Click nodes to expand. Hover for details.</p>
             </div>
-            <Link
-              href="/"
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
-            >
+            <Link href="/" className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg">
               View Knowledge Graph
             </Link>
           </div>
         </div>
 
-        {/* Flowchart */}
-        <div className="h-screen pt-20">
+        <div className="h-full pt-16">
           <ReactFlow
-            nodes={newNodes}
-            edges={newEdges}
+            nodes={flowNodes}
+            edges={flowEdges}
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
             onNodeClick={handleNodeClick}
+            onNodeMouseEnter={handleNodeMouseEnter}
+            onNodeMouseLeave={handleNodeMouseLeave}
             fitView
-            attributionPosition="bottom-left"
+            fitViewOptions={{ padding: 0.2 }}
           >
             <Background color="#374151" gap={20} />
-            <Controls className="bg-gray-800 border-gray-700" />
+            <Controls />
           </ReactFlow>
         </div>
 
-        {/* Legend */}
-        <div className="absolute bottom-4 left-4 bg-gray-900/95 p-4 rounded-lg border border-gray-700 text-sm">
+        <div className="absolute bottom-4 left-4 bg-gray-900/95 p-3 rounded-lg border border-gray-700 text-xs">
           <h3 className="font-bold text-white mb-2">Legend</h3>
-          <div className="space-y-1">
+          <div className="grid grid-cols-2 gap-x-4 gap-y-1">
             {Object.entries(categoryColors).map(([cat, color]) => (
               <div key={cat} className="flex items-center gap-2">
-                <div className="w-4 h-4 rounded" style={{ background: color }} />
+                <div className="w-3 h-3 rounded" style={{ background: color }} />
                 <span className="text-gray-300 capitalize">{cat}</span>
               </div>
             ))}
@@ -506,80 +461,46 @@ export default function FlowchartsPage() {
         </div>
       </div>
 
-      {/* Info Panel */}
-      <div className="w-96 bg-gray-900 border-l border-gray-700 p-6 overflow-y-auto">
+      <div className="w-80 bg-gray-900 border-l border-gray-700 p-4 overflow-y-auto">
         {hoveredData ? (
           <>
-            <div className="flex items-center gap-2 mb-4">
-              <div
-                className="w-4 h-4 rounded"
-                style={{ background: categoryColors[hoveredData.category] }}
-              />
-              <span className="text-sm text-gray-400 capitalize">{hoveredData.category}</span>
+            <div className="flex items-center gap-2 mb-3">
+              <div className="w-3 h-3 rounded" style={{ background: categoryColors[hoveredData.category] }} />
+              <span className="text-xs text-gray-400 capitalize">{hoveredData.category}</span>
             </div>
-
-            <h2 className="text-2xl font-bold text-white mb-4">{hoveredData.label}</h2>
-
+            <h2 className="text-xl font-bold text-white mb-3">{hoveredData.label}</h2>
             {hoveredData.evidence && (
-              <div className="mb-4">
-                <span className="inline-block bg-green-600 text-white px-3 py-1 rounded text-sm font-medium">
-                  Evidence: {hoveredData.evidence}
+              <div className="mb-3">
+                <span className="inline-block bg-green-600 text-white px-2 py-1 rounded text-xs">
+                  {hoveredData.evidence}
                 </span>
               </div>
             )}
-
-            <div className="mb-6">
-              <h3 className="text-sm font-semibold text-gray-400 mb-2">Definition</h3>
-              <p className="text-white leading-relaxed">{hoveredData.definition}</p>
+            <div className="mb-4">
+              <h3 className="text-xs font-semibold text-gray-400 mb-1">Definition</h3>
+              <p className="text-sm text-white leading-relaxed">{hoveredData.definition}</p>
             </div>
-
-            {hoveredData.trials && hoveredData.trials.length > 0 && (
-              <div className="mb-6">
-                <h3 className="text-sm font-semibold text-gray-400 mb-2">Key Trials</h3>
-                <div className="space-y-2">
-                  {hoveredData.trials.map((trial, idx) => (
-                    <div key={idx} className="bg-gray-800 p-3 rounded text-sm text-white">
-                      {trial}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {hoveredData.children && (
-              <div className="text-sm text-gray-400">
-                <span className="text-blue-400">Click</span> to see {hoveredData.children.length} next step(s)
+            {hoveredData.trials && (
+              <div>
+                <h3 className="text-xs font-semibold text-gray-400 mb-1">Key Trials</h3>
+                {hoveredData.trials.map((trial, idx) => (
+                  <div key={idx} className="bg-gray-800 p-2 rounded text-xs text-white mb-1">
+                    {trial}
+                  </div>
+                ))}
               </div>
             )}
           </>
         ) : (
-          <div className="text-gray-400">
-            <h2 className="text-xl font-bold text-white mb-4">ESMO Lung Cancer Guidelines</h2>
-            <p className="mb-4">
-              Interactive decision tree for NSCLC management based on ESMO Living Guidelines.
-            </p>
-            <p className="mb-4">
-              <span className="text-blue-400">Hover</span> over any node to see detailed information including definitions, evidence levels, and key clinical trials.
-            </p>
-            <p>
-              <span className="text-green-400">Click</span> on nodes to expand and explore treatment pathways.
-            </p>
-
-            <div className="mt-6 pt-4 border-t border-gray-700">
-              <h3 className="font-semibold text-white mb-2">Evidence Levels</h3>
-              <div className="text-xs space-y-1">
-                <p><span className="text-green-400">[I, A]</span> Meta-analysis/RCTs, strong recommendation</p>
-                <p><span className="text-blue-400">[II, B]</span> Single RCT, moderate recommendation</p>
-                <p><span className="text-yellow-400">[III, C]</span> Prospective studies, weak recommendation</p>
-              </div>
-            </div>
-
-            <div className="mt-4">
-              <h3 className="font-semibold text-white mb-2">MCBS Score</h3>
-              <div className="text-xs space-y-1">
-                <p><span className="text-purple-400">MCBS 5</span> Highest clinical benefit</p>
-                <p><span className="text-purple-400">MCBS 4</span> Substantial clinical benefit</p>
-              </div>
+          <div className="text-gray-400 text-sm">
+            <h2 className="text-lg font-bold text-white mb-3">ESMO Lung Cancer Guidelines</h2>
+            <p className="mb-3">Interactive decision tree for NSCLC management.</p>
+            <p className="mb-2"><span className="text-blue-400">Hover</span> for definitions & trials</p>
+            <p><span className="text-green-400">Click</span> to expand pathways</p>
+            <div className="mt-4 pt-3 border-t border-gray-700 text-xs">
+              <p className="mb-1"><span className="text-green-400">[I, A]</span> Strong evidence</p>
+              <p className="mb-1"><span className="text-blue-400">[II, B]</span> Moderate evidence</p>
+              <p><span className="text-purple-400">MCBS 4-5</span> High clinical benefit</p>
             </div>
           </div>
         )}
