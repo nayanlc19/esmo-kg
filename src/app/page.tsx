@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import KnowledgeGraph from '@/components/KnowledgeGraph';
 import NodePanel from '@/components/NodePanel';
 import { GraphData, GraphNode } from '@/lib/types';
@@ -99,6 +100,12 @@ export default function Home() {
           <div className="text-sm text-gray-400">
             {graphData?.nodes.length} entities | {graphData?.links.length} relations
           </div>
+          <Link
+            href="/flowcharts"
+            className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors"
+          >
+            View Flowcharts
+          </Link>
         </div>
       </div>
 

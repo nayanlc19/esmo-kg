@@ -14,6 +14,7 @@
     "react": "19.2.1",
     "react-dom": "19.2.1",
     "react-force-graph-3d": "^1.29.0",
+    "reactflow": "^11.11.4",
     "three": "^0.182.0"
   },
   "devDependencies": {
