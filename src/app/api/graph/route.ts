@@ -4,16 +4,16 @@ import { Entity, Relation, GraphData, GraphNode, GraphLink, ENTITY_COLORS } from
 
 export async function GET() {
   try {
-    // Fetch entities
+    // Fetch entities (PostgreSQL normalizes table names to lowercase)
     const { data: entities, error: entitiesError } = await supabase
-      .from('ESMOKG_entities')
+      .from('esmokg_entities')
       .select('*');
 
     if (entitiesError) throw entitiesError;
 
     // Fetch relations
     const { data: relations, error: relationsError } = await supabase
-      .from('ESMOKG_relations')
+      .from('esmokg_relations')
       .select('*');
 
     if (relationsError) throw relationsError;
